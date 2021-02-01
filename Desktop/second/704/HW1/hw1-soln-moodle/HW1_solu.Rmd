@@ -1,0 +1,1371 @@
+---
+title: "ST790 HW1 Solution"
+header-includes:
+  - \usepackage{graphicx}
+  - \usepackage{bm}
+  - \newcommand{\Real}{\mathbb{R}}
+  - \newcommand{\N}{\text{N}}
+  - \newcommand{\E}{\text{E}}
+  - \newcommand{\dom}{{\bf dom}\,}
+  - \newcommand{\Tra}{^{\sf T}} # Transpose
+  - \newcommand{\Inv}{^{-1}} # Inverse
+  - \def\vec{\mathop{\rm vec}\nolimits}
+  - \newcommand{\V}[1]{{\bm{\mathbf{\MakeLowercase{#1}}}}} # vector
+  - \newcommand{\VE}[2]{\MakeLowercase{#1}_{#2}} # vector element
+  - \newcommand{\Vn}[2]{\V{#1}^{(#2)}} # n-th vector
+  - \newcommand{\Vtilde}[1]{{\bm{\tilde \mathbf{\MakeLowercase{#1}}}}} # vector
+  - \newcommand{\Vhat}[1]{{\bm{\hat \mathbf{\MakeLowercase{#1}}}}} # vector
+  - \newcommand{\VtildeE}[2]{\tilde{\MakeLowercase{#1}}_{#2}} # vector element
+  - \newcommand{\M}[1]{{\bm{\mathbf{\MakeUppercase{#1}}}}} # matrix
+  - \newcommand{\ME}[2]{\MakeLowercase{#1}_{#2}} # matrix element
+  - \newcommand{\Mtilde}[1]{{\bm{\tilde \mathbf{\MakeUppercase{#1}}}}} # matrix
+  - \newcommand{\Mbar}[1]{{\bm{\bar \mathbf{\MakeUppercase{#1}}}}} # matrix
+  - \newcommand{\Mn}[2]{\M{#1}^{(#2)}} # n-th matrix
+  - \DeclareMathOperator{\rank}{rank}
+  - \newcommand{\vect}[1]{\boldsymbol{#1}}
+
+output: pdf_document
+---
+
+We know that misspecification of either the mean model or the variance-covariance model could affact our inferences. In this simulation, we want to study the consequences of misspecifying either the mean model or the variance-covariance model in regression analysis. We consider a response $n$-vector $\vect{Y}$ that is distributed as multivariate normal with mean $\vect{X\beta}+\vect{Z\gamma}$ and variance-covariance $\sigma^2\vect{V}$. We wish to study inferential properties under the assumption that $\vect{Y}$ is distributed as multivariate normal but with mean $\vect{X\beta}$ and variance-covariance $\sigma^2\vect{I}$. More specifically, we wish to study whether:
+
+\begin{itemize}
+	\item $\vect{\beta}$ is unbiasedly estimated;
+	\item the true mean response $(\vect{X\beta}+\vect{Z\gamma})$ is unbiasedly estimated;
+	\item the assumed mean response $(\vect{X\beta})$ is unbiasedly estimated;
+	\item 95 percent confidence intervals for $\beta_j$ have coverage at least 0.95;
+	\item the expected length of 95 percent confidence intervals for $\beta_j$ is affected.
+\end{itemize}
+
+\section{Prob 1}
+
+We set up the simulation as following:
+
+$$\vect{Y} = \M{X}\vect{\beta}+\vect{Z\gamma}+ \vect{\epsilon}, \vect{\epsilon} \sim N(\vect{0},\vect{I}_{n}), \quad \boldsymbol{\beta}=\left[\begin{array}{c}{5} \\{-1}\end{array}\right], n=25$$
+where $X = \left[\begin{array}{cc} 1 & x_{1}  \\ 1 & x_{2} \\ \vdots & \vdots \\  1 & x_{n} \\  \end{array} \right]$ and $\left[\begin{array}{c} x_{1} \\  x_{2} \\  \vdots \\ x_{n} \\ \end{array} \right]$ is n random numbers generated from a standard normal distribution. The n-vector $\vect{\epsilon}$ is also randomly generated from a standard normal distribution. The simulation replicate is $m=1000$.
+
+Note that $\mathbf{Z}$ and $\gamma$ have different settings under each case:
+
+CASE 0: $\gamma=0$ -- demonstrates usual properties;
+
+CASE 1: $\gamma = 5$, Z in column space of X, i.e., $Z=X\left[\begin{array}{l}{4}\\{1}\end{array}\right]$;
+
+CASE 2: $\gamma = 5$, Z orthogonal to column space of X, i.e., $Z=\left(I-P_{X}\right)(4+N(0,1))$;
+
+CASE 3: other, i.e., $Z=[-1,-2, \ldots,-n]^{T}$.
+
+Note that our true model is $\vect{Y} = \M{X}\vect{\beta}+\vect{Z\gamma}+ \vect{\epsilon}, \vect{\epsilon} \sim N(\vect{0},\sigma^2 \vect{I})$.
+
+```{r echo=FALSE}
+set.seed(5678)
+beta <- c(5,-1)
+gamma <- 5
+B <- matrix(c(4,1),2,1)
+n <- 25			#sample size
+M <- 1000			#number of simulation replicates
+
+## Initialization
+beta0 <- matrix(NA,M,4)
+beta1 <- matrix(NA,M,4)
+cicp <- matrix(0,2,4)
+cilen <- matrix(0,2,4)
+yobs <- array(NA, c(n,M,4))
+yhat <- array(NA, c(n,M,4))
+one <- matrix( rep(1,n), nrow=n,ncol=1 )
+x1 <- matrix( rnorm(n), nrow=n,ncol=1 )
+X <- cbind( one, x1 )
+Xbeta <- X %*% beta
+zlin <- X %*% B
+zorthog <- (diag(rep(1,n))-X%*%solve(t(X)%*%X)%*%t(X)) %*% matrix((4+rnorm(n)),n,1)
+#print( t(X)%*%zorthog )
+zother <- seq(-1,-n,,n)
+
+## Obtain simulation replicates
+for(m in 1:M){
+  epsi = rnorm(n)
+  #CASE 0
+  j <- 1
+  y <- yobs[,m,j] <- Xbeta + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 1
+  j <- 2
+  Zgamma <- zlin*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 2
+  j <- 3
+  Zgamma <- zorthog*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 3
+  j <- 4
+  Zgamma <- zother*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+}
+cicp <- cicp/M
+cilen <- cilen/M
+```
+
+\newpage
+\subsection{(Case 0)}
+
+```{r echo=FALSE}
+par(mfrow=c(2,2))
+
+j<-1
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 0: assumed=truth", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+```
+\
+According to the plot above, we could conclude that:
+
+1. The 1st and 2nd plots show that $\beta_0$ and $\beta_1$ are unbiasedly estimated since all points are fallen around the straight red line for both $\beta_0$ and $\beta_1$, which means the expected value of estimated $\beta_j$ are consistent with the true $\beta_j$.The analytical solution gives $E(\hat{\vect{\beta}}) = (\vect{X}\Tra \vect{X})\Inv \vect{X}\Tra E(\vect{Y}) = (\vect{X}\Tra \vect{X})\Inv \vect{X}\Tra (\vect{X}\vect{\beta} + \vect{Z}0) = \vect{\beta}$, the coefficient $\vect{\beta}$ is unbiasedly estimated; 
+
+2. The 3rd plot shows that the true mean response ($X\beta + Z\gamma$) is unbiasedly estimated since all points are fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) = X\beta + Z\gamma$.
+
+3. The 4th plot shows that the assumed mean response ($X\beta$) is unbiasedly estimated since all points are fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) = X\beta$.The analytical solution gives $E(\hat{\vect{Y}}) = \vect{P}_{\vect{X}} E(\vect{Y}) = \vect{P}_{\vect{X}} (\vect{X}\vect{\beta} + \vect{Z}0) = \vect{X} \vect{\beta}$, true mean response $\vect{X\beta}+\vect{Z\gamma} = \vect{X\beta}+\vect{Z}0$ is unbiasedly estimated, and the assumed mean response $\vect{X\beta}$ is unbiasedly estimated.
+
+4. The $95\%$ confidence interval for $\beta_0$ and $\beta_1$ have coverage 0.942 and 0.949 respectively, which are around 0.95.
+
+5. When the assumption holds, the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ are 0.814 and 0.69 respectively.
+
+
+
+
+\newpage
+\subsection{(Case 1)}
+
+```{r echo=FALSE}
+par(mfrow=c(2,2))
+
+j<-2
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 1: Z in column space of X", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+```
+\
+According to the plot above, we could conclude that:
+
+1. The 1st and 2nd plots show that $\beta_0$ and $\beta_1$ are not unbiasedly estimated since all points are not fallen around the straight red line for both $\beta_0$ and $\beta_1$, which means the expected value of estimated $\beta_j$ are different from the true $\beta_j$.The analytical solution gives $E(\hat{\vect{\beta}}) = (\vect{X}\Tra \vect{X})\Inv \vect{X}\Tra E(\vect{Y}) = (\vect{X}\Tra \vect{X})\Inv \vect{X}\Tra (\vect{X}\vect{\beta} + \vect{Z}\gamma) = (\vect{X}\Tra \vect{X})\Inv \vect{X}\Tra (\vect{X}\vect{\beta} + \vect{X}\vect{B}) = \vect{\beta} + \vect{B}\gamma$, the coefficient $\vect{\beta}$ is NOT unbiasedly estimated. 
+
+2. The 3rd plot shows that the true mean response ($X\beta + Z\gamma$) is unbiasedly estimated since all points are fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) = X\beta + Z\gamma$.
+
+3. The 4th plot shows that the assumed mean response ($X\beta$) is not unbiasedly estimated since all points are not fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) \ne X\beta$.The analytical solution shows $E(\hat{\vect{Y}})= \vect{P}_{\vect{X}} E(\vect{Y}) = \vect{P}_{\vect{X}} (\vect{X}\vect{\beta} + \vect{Z}\gamma) = \vect{P}_{\vect{X}} (\vect{X}\vect{\beta} + \vect{XB}\gamma) = \vect{X} \vect{\beta} + \vect{XB}\gamma = \vect{X} \vect{\beta} + \vect{Z}\gamma$, the true mean response $\vect{X\beta}+\vect{Z\gamma}$ is unbiasedly estimated, and the assumed mean response $\vect{X\beta}$ is NOT unbiasedly estimated.
+
+4. The $95\%$ confidence interval for $\beta_0$ and $\beta_1$ have coverage 0 and 0 respectively, which are much less than 0.95.
+
+5. The average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ are 0.814 and 0.69 respectively, which are exactly the same as we got in Case 0, so the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ are not affected by the misspecification, but they are completely shifted in a way that causes them to completely miss the true parameter values.
+
+
+\newpage
+\subsection{(Case 2)}
+
+```{r echo=FALSE}
+par(mfrow=c(2,2))
+
+j<-3
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 2: Z orthogonal to column space of X", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+```
+\
+According to the plot above, we could conclude that:
+
+1. The 1st and 2nd plots show that $\beta_0$ and $\beta_1$ are unbiasedly estimated since all points are fallen around the straight red line for both $\beta_0$ and $\beta_1$, which means the expected value of estimated $\beta_j$ are consistent with the true $\beta_j$.The analytical solution gives $E(\hat{\vect{\beta}}) = (\vect{X}\Tra \vect{X})\Inv \vect{X}\Tra E(\vect{Y}) = (\vect{X}\Tra \vect{X})\Inv \vect{X}\Tra (\vect{X}\vect{\beta} + \vect{Z}\gamma) = \vect{\beta} + (\vect{X}\Tra \vect{X})\Inv \vect{X}\Tra \vect{Z}\gamma = \vect{\beta}$, the coefficient $\vect{\beta}$ is unbiasedly estimated. 
+
+2. The 3rd plot shows that the true mean response ($X\beta + Z\gamma$) is not unbiasedly estimated since not all points are fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) \ne X\beta + Z\gamma$.
+
+3. The 4th plot shows that the assumed mean response ($X\beta$) is unbiasedly estimated since all points are fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) = X\beta$.The analytical solution gives $E(\hat{\vect{Y}})= \vect{P}_{\vect{X}} E(\vect{Y}) = \vect{P}_{\vect{X}} (\vect{X}\vect{\beta} + \vect{Z}\gamma) = \vect{X}\vect{\beta} + \vect{X}(\vect{X}\Tra \vect{X})\Inv \vect{X}\Tra \vect{Z}\gamma = \vect{X} \vect{\beta}$, the true mean response $\vect{X\beta}+\vect{Z\gamma}$ is NOT unbiasedly estimated, and the assumed mean response $\vect{X\beta}$ is unbiasedly estimated.
+
+4. The $95\%$ confidence interval for $\beta_0$ and $\beta_1$ have coverage 1 and 1 respectively, which are both at least 0.95.
+
+5. When the assumption holds, the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ are 0.814 and 0.69 respectively, but the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ we got are 4.172 and 3.536 in Case 2, which are highly affected by the misspecification. The confidence intervals for $\beta_0$ and $\beta_1$ are so wide that they *always* include the true parameter values.
+
+
+
+\newpage
+\subsection{(Case 3)}
+
+```{r echo=FALSE}
+par(mfrow=c(2,2))
+
+j<-4
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 3: other", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+```
+\
+According to the plot above, we could conclude that:
+
+1. The 1st and 2nd plots show that $\beta_0$ and $\beta_1$ are not unbiasedly estimated since all points are not fallen around the straight red line for both $\beta_0$ and $\beta_1$, which means the expected value of estimated $\beta_j$ are different from the true $\beta_j$. The analytical solution gives $E(\hat{\vect{\beta}}) = (\vect{X}\Tra \vect{X})\Inv \vect{X}\Tra E(\vect{Y}) = (\vect{X}\Tra \vect{X})\Inv \vect{X}\Tra (\vect{X}\vect{\beta} + \vect{Z}\gamma) = \vect{\beta} + (\vect{X}\Tra \vect{X})\Inv \vect{X}\Tra \vect{Z}\gamma = \vect{\beta} + (\vect{X}\Tra \vect{X})\Inv \vect{X}\Tra [-\gamma, -2\gamma, \cdots, -n\gamma]\Tra$, the coefficient $\vect{\beta}$ is NOT unbiasedly estimated. 
+
+2. The 3rd plot shows that the true mean response ($X\beta + Z\gamma$) is not unbiasedly estimated since all points are not fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) \ne X\beta + Z\gamma$.
+
+3. The 4th plot shows that the assumed mean response ($X\beta$) is not unbiasedly estimated since all points are not fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) \ne X\beta$.The analytical solution gives $E(\hat{\vect{Y}})= \vect{P}_{\vect{X}} E(\vect{Y}) = \vect{P}_{\vect{X}} (\vect{X}\vect{\beta} + \vect{Z}\gamma) = \vect{X\beta} + \vect{P}_{\vect{X}}[-\gamma, -2\gamma, \cdots, -n\gamma]\Tra$; the true mean response $\vect{X\beta}+\vect{Z\gamma}$ is NOT unbiasedly estimated, and the assumed mean response $\vect{X\beta}$ is NOT unbiasedly estimated. 
+
+4. The $95\%$ confidence interval for $\beta_0$ and $\beta_1$ have coverage 0 and 0.21 respectively, which are much less than 0.95.
+
+5. When the assumption holds, the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ are 0.814 and 0.69 respectively, but the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ we got are 28.525 and 24.174 in Case 3, which are highly affected by the misspecification.
+
+
+
+\newpage
+\section{Prob 2}
+
+We set up the simulation as following:
+
+$$\vect{Y} = \M{X}\vect{\beta} + \vect{Z\gamma} + \vect{\epsilon}, \vect{\epsilon} \sim N(\vect{0},\vect{V}), \quad \boldsymbol{\beta}=\left[\begin{array}{c}{5} \\{-1}\end{array}\right], n=25$$
+where $V(Y_i,Y_j)=0.5^{|i-j|},i \neq j$, and $X = \left[\begin{array}{cc} 1 & x_{1}  \\ 1 & x_{2} \\ \vdots & \vdots \\  1 & x_{n} \\  \end{array} \right]$ where $\left[\begin{array}{c} x_{1}  \\  x_{2} \\  \vdots \\  x_{n} \\  \end{array} \right]$ is n random numbers generated from a standard normal distribution. $\vect{\epsilon}=\left[\begin{array}{c} \epsilon_1  \\ \epsilon_2 \\  \vdots \\  \epsilon_n \\  \end{array}\right]$ is a random vector generated from a multivariate normal distribution $N(\vect{0},\vect{V})$. The simulation replicate is $m=1000$.
+
+To generate the correlation/covariance matrix $\bf{V}$, we still assume $\sigma^2 = 1$. The change of $\bf{V}$ should not affact the expected values of the estimates of $\bf{\beta}$, $X\beta + Zy$, and $\bf{X\beta}$, however, it will change the variance of $\hat{\bf{\beta}}$ to $(\bf{X^TX})^-\bf{X^T}\sigma^2VX(\bf{X^TX})^-$. We generate the error term $\epsilon$ using `mvrnorm` function in package `MASS`. Note that since we assume $\sigma = 1$, there is no need to convert the correlation matrix into a covariance matrix.
+
+Note that $\mathbf{Z}$ and $\gamma$ have different settings under each case:
+
+CASE 0: $\gamma=0$ -- demonstrates usual properties;
+
+CASE 1: $\gamma = 5$, Z in column space of X, i.e., $Z=X\left[\begin{array}{l}{4}\\{1}\end{array}\right]$;
+
+CASE 2: $\gamma = 5$, Z orthogonal to column space of X, i.e., $Z=\left(I-P_{X}\right)(4+N(0,1))$;
+
+CASE 3: other, i.e., $Z=[-1,-2, \ldots,-n]^{T}$.
+
+Note that our true model is $\vect{Y} = \M{X}\vect{\beta}+\vect{Z\gamma}+ \vect{\epsilon}, \vect{\epsilon} \sim N(\vect{0},\sigma^2 \vect{V})$, where corr$(Y_i,Y_j)=\rho^{|i-j|}$.The assumed model is $\vect{Y} = \vect{X\beta}+\vect{\epsilon}$, with $\vect{Y} \sim \vect{N}(\vect{X\beta}, \sigma^2\vect{I})$.The estimator is $\hat{\vect{\beta}} = (\vect{X}\Tra \vect{X})\Inv \vect{X}\Tra \vect{Y}$ with $Var(\hat{\vect{\beta}}) = \sigma^2 (\vect{X}\Tra \vect{X})\Inv \vect{X}\Tra \vect{V} \vect{X} (\vect{X}\Tra \vect{X})\Inv$.  The analytical solutions for whether $\vect{\beta}$, $\vect{X\beta}+\vect{Z\gamma}$, and $\vect{X\beta}$ are unbiased estimated are the same as Question 1. But here the variance of $\hat{\vect{\beta}}$ is different from that of Question 1, where $Var(\hat{\vect{\beta}}) = \sigma^2 (\vect{X}\Tra \vect{X})\Inv$. This would lead to variance differences between the true model and the assumed model, and further affect the confidence intervals. 
+
+Estimating the $\sigma^2$ with $MSE = \sum (y_{i} - \hat{y})^2/ (n-2)$ would also lead to variance differences between the true model and the assumed model and the confidence intervals. We can expect the change of variance-covariance matrix would lead to the change of $MSE$. 
+
+The code to create matrix $\vect{V}$ is
+```{r eval=FALSE}
+rho <- 0.5
+V_rho <- matrix(NA,25,25)
+for(i in 1:25){
+  for(j in 1:25){
+    V_rho[i,j] <- rho^abs(i-j)
+  }
+}
+```
+For generating the $n$-vector $\vect{\epsilon}$, where $\vect{\epsilon} \sim N(\vect{0},\sigma^2 \vect{V})$, the code is
+```{r eval=FALSE}
+epsi = mvrnorm(n = 1, mu=rep(0,n), Sigma=V_rho)
+```
+
+```{r echo=FALSE}
+set.seed(5678)
+beta <- c(5,-1)
+gamma <- 5
+B <- matrix(c(4,1),2,1)
+n <- 25			#sample size
+M <- 1000			#number of simulation replicates
+
+## define correlation matrix
+rho <- 0.5
+V_rho <- matrix(NA,25,25)
+for(i in 1:25){
+  for(j in 1:25){
+    V_rho[i,j] <- rho^abs(i-j)
+  }
+}
+
+## Initialization
+beta0 <- matrix(NA,M,4)
+beta1 <- matrix(NA,M,4)
+cicp <- matrix(0,2,4)
+cilen <- matrix(0,2,4)
+yobs <- array(NA, c(n,M,4))
+yhat <- array(NA, c(n,M,4))
+one <- matrix( rep(1,n), nrow=n,ncol=1 )
+x1 <- matrix( rnorm(n), nrow=n,ncol=1 )
+X <- cbind( one, x1 )
+Xbeta <- X %*% beta
+zlin <- X %*% B
+zorthog <- (diag(rep(1,n))-X%*%solve(t(X)%*%X)%*%t(X)) %*% matrix((4+rnorm(n)),n,1)
+#print( t(X)%*%zorthog )
+zother <- seq(-1,-n,,n)
+
+## Obtain simulation replicates
+library(MASS)
+for(m in 1:M){
+  epsi = mvrnorm(n = 1, mu=rep(0,n), Sigma=V_rho)
+
+  #CASE 0
+  j <- 1
+  y <- yobs[,m,j] <- Xbeta + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 1
+  j <- 2
+  Zgamma <- zlin*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 2
+  j <- 3
+  Zgamma <- zorthog*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 3
+  j <- 4
+  Zgamma <- zother*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+}
+cicp <- cicp/M
+cilen <- cilen/M
+```
+
+\newpage
+\section{Prob 2a}
+
+For 2(a), we set $\rho = 0.5$.
+
+\subsection{(Case 0)}
+
+```{r, echo=FALSE}
+par(mfrow=c(2,2))
+
+j<-1
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 0: assumed=truth", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+```
+\
+According to the plot above, we could conclude that:
+
+1. The 1st and 2nd plots show that $\beta_0$ and $\beta_1$ are unbiasedly estimated since all points are fallen around the straight red line for both $\beta_0$ and $\beta_1$, which means the expected value of estimated $\beta_j$ are consistent with the true $\beta_j$.
+
+2. The 3rd plot shows that the true mean response ($X\beta + Z\gamma$) is unbiasedly estimated since all points are fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) = X\beta + Z\gamma$.
+
+3. The 4th plot shows that the assumed mean response ($X\beta$) is unbiasedly estimated since all points are fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) = X\beta$.
+
+4. The $95\%$ confidence interval for $\beta_0$ and $\beta_1$ have coverage 0.731 and 0.911 respectively, both are less than 0.95, especially $\beta_0$.
+
+5. When the assumption holds, the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ are 0.77 and 0.652 respectively.
+
+\newpage
+\subsection{(Case 1)}
+
+```{r, echo=FALSE}
+par(mfrow=c(2,2))
+
+j<-2
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 1: Z in column space of X", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+```
+\
+According to the plot above, we could conclude that:
+
+1. The 1st and 2nd plots show that $\beta_0$ and $\beta_1$ are not unbiasedly estimated since all points are not fallen around the straight red line for both $\beta_0$ and $\beta_1$, which means the expected value of estimated $\beta_j$ are different from the true $\beta_j$.
+
+2. The 3rd plot shows that the true mean response ($X\beta + Z\gamma$) is unbiasedly estimated since all points are fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) = X\beta + Z\gamma$.
+
+3. The 4th plot shows that the assumed mean response ($X\beta$) is not unbiasedly estimated since all points are away from the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) \ne X\beta$.
+
+4. The $95\%$ confidence interval for $\beta_0$ and $\beta_1$ both have coverage 0, which are much less than 0.95.
+
+5. The average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ are 0.77 and 0.652 respectively, which are exactly the same as we got in Case 0, so the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ are not affected by the misspecification, but they are completely shifted in a way that causes them to completely miss the true parameter values.
+
+\newpage
+\subsection{(Case 2)}
+
+```{r, echo=FALSE}
+par(mfrow=c(2,2))
+
+j<-3
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 2: Z orthogonal to column space of X", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+```
+\
+According to the plot above, we could conclude that:
+
+1. The 1st and 2nd plots show that $\beta_0$ and $\beta_1$ are unbiasedly estimated since all points are fallen around the straight red line for both $\beta_0$ and $\beta_1$, which means the expected value of estimated $\beta_j$ are consistent with the true $\beta_j$.
+
+2. The 3rd plot shows that the true mean response ($X\beta + Z\gamma$) is not unbiasedly estimated since not all points are fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) \ne X\beta + Z\gamma$.
+
+3. The 4th plot shows that the assumed mean response ($X\beta$) is unbiasedly estimated since all points are fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) = X\beta$.
+
+4. The $95\%$ confidence interval for $\beta_0$ and $\beta_1$ have coverage 1 and 1 respectively, which are both at least 0.95.
+
+5. When the assumption holds, the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ are 0.77 and 0.652 respectively, but the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ we got are 4.157 and 3.523 in Case 2, which are highly affected by the misspecification. And the confidence intervals for $\beta_0$ and $\beta_1$ are so wide that they *always* include the true parameter values.
+
+\newpage
+\subsection{(Case 3)}
+
+```{r, echo=FALSE}
+par(mfrow=c(2,2))
+
+j<-4
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 3: other", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+```
+\
+According to the plot above, we could conclude that:
+
+1. The 1st and 2nd plots show that $\beta_0$ and $\beta_1$ are not unbiasedly estimated since all points are not fallen around the straight red line for both $\beta_0$ and $\beta_1$, which means the expected value of estimated $\beta_j$ are different from the true $\beta_j$.
+
+2. The 3rd plot shows that the true mean response ($X\beta + Z\gamma$) is not unbiasedly estimated since all points are not fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) \ne X\beta + Z\gamma$.
+
+3. The 4th plot shows that the assumed mean response ($X\beta$) is not unbiasedly estimated since all points are not fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) \ne X\beta$.
+
+4. The $95\%$ confidence interval for $\beta_0$ and $\beta_1$ have coverage 0 and 0.22 respectively, both are much less than 0.95.
+
+5. When the assumption holds, the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ are 0.77 and 0.652 respectively, but the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ we got are 28.52 and 24.169 in Case 3, which are highly affected by the misspecification.
+
+In words, we see that when the variance-covariance matrix changes, there are changes in actual coverage probabilities of reported $95\%$ confidence intervals and in the average lengths of these confidence intervals. This is because confidence intervals are affacted by the variance-covariance matrix. 
+
+\newpage
+\section{Prob 2b}
+
+For 2(b), we use the same way to generate data but change $\rho$ to $\rho = 0.9$.
+
+```{r, echo=FALSE}
+set.seed(5678)
+beta <- c(5,-1)
+gamma <- 5
+B <- matrix(c(4,1),2,1)
+n <- 25			#sample size
+M <- 1000			#number of simulation replicates
+
+## define correlation matrix
+rho <- 0.9
+V_rho <- matrix(NA,25,25)
+for(i in 1:25){
+  for(j in 1:25){
+    V_rho[i,j] <- rho^abs(i-j)
+  }
+}
+
+## Initialization
+beta0 <- matrix(NA,M,4)
+beta1 <- matrix(NA,M,4)
+cicp <- matrix(0,2,4)
+cilen <- matrix(0,2,4)
+yobs <- array(NA, c(n,M,4))
+yhat <- array(NA, c(n,M,4))
+one <- matrix( rep(1,n), nrow=n,ncol=1 )
+x1 <- matrix( rnorm(n), nrow=n,ncol=1 )
+X <- cbind( one, x1 )
+Xbeta <- X %*% beta
+zlin <- X %*% B
+zorthog <- (diag(rep(1,n))-X%*%solve(t(X)%*%X)%*%t(X)) %*% matrix((4+rnorm(n)),n,1)
+#print( t(X)%*%zorthog )
+zother <- seq(-1,-n,,n)
+
+## Obtain simulation replicates
+library(MASS)
+for(m in 1:M){
+  epsi = mvrnorm(n = 1, mu=rep(0,n), Sigma=V_rho)
+
+  #CASE 0
+  j <- 1
+  y <- yobs[,m,j] <- Xbeta + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 1
+  j <- 2
+  Zgamma <- zlin*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 2
+  j <- 3
+  Zgamma <- zorthog*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 3
+  j <- 4
+  Zgamma <- zother*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+}
+cicp <- cicp/M
+cilen <- cilen/M
+```
+
+\subsection{(Case 0)}
+
+```{r echo=FALSE}
+par(mfrow=c(2,2))
+
+j<-1
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 0: assumed=truth", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+```
+\
+According to the plot above, we could conclude that:
+
+1. The 1st and 2nd plots show that $\beta_0$ and $\beta_1$ are unbiasedly estimated since all points are fallen around the straight red line for both $\beta_0$ and $\beta_1$, which means the expected value of estimated $\beta_j$ are consistent with the true $\beta_j$.
+
+2. The 3rd plot shows that the true mean response ($X\beta + Z\gamma$) is unbiasedly estimated since all points are fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) = X\beta + Z\gamma$.
+
+3. The 4th plot shows that the assumed mean response ($X\beta$) is unbiasedly estimated since all points are fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) = X\beta$.
+
+4. The $95\%$ confidence interval for $\beta_0$ and $\beta_1$ have coverage 0.304 and 0.826 respectively, both are less than 0.95, especially $\beta_0$.
+
+5. When the assumption holds, the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ are 0.561 and 0.475 respectively.
+
+\newpage
+\subsection{(Case 1)}
+
+```{r echo=FALSE}
+par(mfrow=c(2,2))
+
+j<-2
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 1: Z in column space of X", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+```
+\
+According to the plot above, we could conclude that:
+
+1. The 1st and 2nd plots show that $\beta_0$ and $\beta_1$ are not unbiasedly estimated since all points are not fallen around the straight red line for both $\beta_0$ and $\beta_1$, which means the expected value of estimated $\beta_j$ are different from the true $\beta_j$.
+
+2. The 3rd plot shows that the true mean response ($X\beta + Z\gamma$) is unbiasedly estimated since all points are fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) = X\beta + Z\gamma$.
+
+3. The 4th plot shows that the assumed mean response ($X\beta$) is not unbiasedly estimated since all points are not fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) \ne X\beta$.
+
+4. The $95\%$ confidence interval for $\beta_0$ and $\beta_1$ both have coverage 0, which are much less than 0.95.
+
+5. The average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ are 0.561 and 0.475 respectively, which are exactly the same as we got in Case 0, so the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ are not affected by the misspecification, but they are completely shifted in a way that causes them to completely miss the true parameter values.
+
+\newpage
+\subsection{(Case 2)}
+
+```{r echo=FALSE}
+par(mfrow=c(2,2))
+
+j<-3
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 2: Z orthogonal to column space of X", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+```
+\
+According to the plot above, we could conclude that:
+
+1. The 1st and 2nd plots show that $\beta_0$ and $\beta_1$ are unbiasedly estimated since all points are fallen around the straight red line for both $\beta_0$ and $\beta_1$, which means the expected value of estimated $\beta_j$ are consistent with the true $\beta_j$.
+
+2. The 3rd plot shows that the true mean response ($X\beta + Z\gamma$) is not unbiasedly estimated since not all points are fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) \ne X\beta + Z\gamma$.
+
+3. The 4th plot shows that the assumed mean response ($X\beta$) is unbiasedly estimated since all points are fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) = X\beta$.
+
+4. The $95\%$ confidence interval for $\beta_1$ and $\beta_2$ have coverage 0.998 and 1 respectively, which are both at least 0.95.
+
+5. When the assumption holds, the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ are 0.561 and 0.475 respectively, but the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ we got are 4.122 and 3.494 in Case 2, which are highly affected by the misspecification. And the confidence intervals for $\beta_0$ and $\beta_1$ are so wide that they *always* include the true parameter values.
+
+\newpage
+\subsection{(Case 3)}
+
+```{r echo=FALSE}
+par(mfrow=c(2,2))
+
+j<-4
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 3: other", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+```
+\
+According to the plot above, we could conclude that:
+
+1. The 1st and 2nd plots show that $\beta_0$ and $\beta_1$ are not unbiasedly estimated since all points are not fallen around the straight red line for both $\beta_0$ and $\beta_1$, which means the expected value of estimated $\beta_j$ are different from the true $\beta_j$.
+
+2. The 3rd plot shows that the true mean response ($X\beta + Z\gamma$) is not unbiasedly estimated since all points are not fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) \ne X\beta + Z\gamma$.
+
+3. The 4th plot shows that the assumed mean response ($X\beta$) is not unbiasedly estimated since all points are not fallen around the red line with slope 1 and intercept 0, which means that $E(\hat{Y}) \ne X\beta$.
+
+4. The $95\%$ confidence interval for $\beta_0$ and $\beta_1$ have coverage 0 and 0.132 respectively, both are much less than 0.95.
+
+5. When the assumption holds, the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ are 0.561 and 0.475 respectively, but the average length of $95\%$ confidence intervals for $\beta_0$ and $\beta_1$ we got here are 28.523 and 24.172, the differences show that our average CI length are affected by the misspecification.
+
+In words, we see that when the variance-covariance matrix changes, there are changes in actual coverage probabilities of reported $95\%$ confidence intervals and in the average lengths of these confidence intervals. This is because confidence intervals are affacted by the variance-covariance matrix. 
+
+\newpage
+\section{Summary}
+
+The following table gives us a full comparison about the inferential properties under each setting and its corresponding cases.
+
+\begin{table}[!h]
+\caption{Summary of overall simulation results}
+\resizebox{1\columnwidth}{!}{%
+\begin{tabular}{cccccccccc}
+Case & $\rho$ & $E(\hat{\beta_0})=\beta_0$ & $E(\hat{\beta_1})=\beta_1$ & $E(\hat{\mathbf{Y}})=\mathbf{X}\beta+\mathbf{Z}\gamma$ & $E(\hat{\mathbf{Y}})=\mathbf{X}\beta$ & $cp_0$ & $cp_1$ & $length_0$ & $length_1$  \\ \hline 
+
+0 & 0 & $\surd$&$\surd$&$\surd$&$\surd$ & .942 & .949 & .814 & .69 \\
+0 & 0.5 & $\surd$&$\surd$&$\surd$&$\surd$ & .731 &.911 & .77 & .652 \\
+0 & 0.9 & $\surd$&$\surd$&$\surd$&$\surd$ & .304 & .826 & .561 &.475 \\ \hline
+
+1 & 0 & $\times$&$\times$&$\surd$&$\times$ & 0 & 0 & .814 & .69 \\
+1 & 0.5 & $\times$&$\times$&$\surd$&$\times$ & 0 & 0 & .77 & .652 \\
+1 & 0.9 & $\times$&$\times$&$\surd$&$\times$ & 0 & 0 & .561 & .475 \\ \hline
+
+2 & 0 & $\surd$&$\surd$&$\times$&$\surd$ & 1 & 1 & 4.172 & 3.536 \\
+2 & 0.5 & $\surd$&$\surd$&$\times$&$\surd$ & 1 & 1 & 4.157 & 3.523 \\
+2 & 0.9 & $\surd$&$\surd$&$\times$&$\surd$ & .998 & 1 & 4.122 & 3.494 \\ \hline
+
+3 & 0 & $\times$&$\times$&$\times$&$\times$ & 0 & .21 & 28.525 & 24.174 \\
+3 & 0.5 & $\times$&$\times$&$\times$&$\times$ & 0 & .22 & 28.52 & 24.169 \\
+3 & 0.9 & $\times$&$\times$&$\times$&$\times$ & 0 & .132 & 28.523 & 24.172 \\ \hline
+
+\multicolumn{10}{c}{\footnotesize $cp_0$ and $cp_1$ denote the coverage of $95\%$ CI for $\beta_0$ and $\beta_1$, $length_0$ and $length_1$ denote the expected length of $95\%$ CI for $\beta_0$ and $\beta_1$}
+
+\end{tabular}
+}
+\end{table}
+
+\subsection{Appendix}
+```{r, eval=FALSE}
+# Prob 1
+set.seed(5678)
+beta <- c(5,-1)
+gamma <- 5
+B <- matrix(c(4,1),2,1)
+n <- 25			#sample size
+M <- 1000			#number of simulation replicates
+
+## Initialization
+beta0 <- matrix(NA,M,4)
+beta1 <- matrix(NA,M,4)
+cicp <- matrix(0,2,4)
+cilen <- matrix(0,2,4)
+yobs <- array(NA, c(n,M,4))
+yhat <- array(NA, c(n,M,4))
+one <- matrix( rep(1,n), nrow=n,ncol=1 )
+x1 <- matrix( rnorm(n), nrow=n,ncol=1 )
+X <- cbind( one, x1 )
+Xbeta <- X %*% beta
+zlin <- X %*% B
+zorthog <- (diag(rep(1,n))-X%*%solve(t(X)%*%X)%*%t(X)) %*% matrix((4+rnorm(n)),n,1)
+print( t(X)%*%zorthog )
+zother <- seq(-1,-n,,n)
+
+## Obtain simulation replicates
+for(m in 1:M){
+  epsi = rnorm(n)
+  #CASE 0
+  j <- 1
+  y <- yobs[,m,j] <- Xbeta + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 1
+  j <- 2
+  Zgamma <- zlin*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 2
+  j <- 3
+  Zgamma <- zorthog*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 3
+  j <- 4
+  Zgamma <- zother*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+}
+cicp <- cicp/M
+cilen <- cilen/M
+
+par(mfrow=c(2,2))
+
+j<-1
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 0: assumed=truth", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+
+par(mfrow=c(2,2))
+
+j<-2
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 1: Z in column space of X", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+
+par(mfrow=c(2,2))
+
+j<-3
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 2: Z orthogonal to column space of X", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+
+par(mfrow=c(2,2))
+
+j<-4
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 3: other", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+
+# Prob 2a
+set.seed(5678)
+beta <- c(5,-1)
+gamma <- 5
+B <- matrix(c(4,1),2,1)
+n <- 25			#sample size
+M <- 1000			#number of simulation replicates
+
+## define correlation matrix
+rho <- 0.5
+V_rho <- matrix(NA,25,25)
+for(i in 1:25){
+  for(j in 1:25){
+    V_rho[i,j] <- rho^abs(i-j)
+  }
+}
+
+## Initialization
+beta0 <- matrix(NA,M,4)
+beta1 <- matrix(NA,M,4)
+cicp <- matrix(0,2,4)
+cilen <- matrix(0,2,4)
+yobs <- array(NA, c(n,M,4))
+yhat <- array(NA, c(n,M,4))
+one <- matrix( rep(1,n), nrow=n,ncol=1 )
+x1 <- matrix( rnorm(n), nrow=n,ncol=1 )
+X <- cbind( one, x1 )
+Xbeta <- X %*% beta
+zlin <- X %*% B
+zorthog <- (diag(rep(1,n))-X%*%solve(t(X)%*%X)%*%t(X)) %*% matrix((4+rnorm(n)),n,1)
+print( t(X)%*%zorthog )
+zother <- seq(-1,-n,,n)
+
+## Obtain simulation replicates
+library(MASS)
+for(m in 1:M){
+  epsi = mvrnorm(n = 1, mu=rep(0,n), Sigma=V_rho)
+  
+  #CASE 0
+  j <- 1
+  y <- yobs[,m,j] <- Xbeta + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 1
+  j <- 2
+  Zgamma <- zlin*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 2
+  j <- 3
+  Zgamma <- zorthog*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 3
+  j <- 4
+  Zgamma <- zother*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+}
+cicp <- cicp/M
+cilen <- cilen/M
+
+par(mfrow=c(2,2))
+
+j<-1
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 0: assumed=truth", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+
+par(mfrow=c(2,2))
+
+j<-2
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 1: Z in column space of X", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+
+par(mfrow=c(2,2))
+
+j<-3
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 2: Z orthogonal to column space of X", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+
+par(mfrow=c(2,2))
+
+j<-4
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 3: other", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+
+# Prob 2b
+set.seed(5678)
+beta <- c(5,-1)
+gamma <- 5
+B <- matrix(c(4,1),2,1)
+n <- 25			#sample size
+M <- 1000			#number of simulation replicates
+
+## define correlation matrix
+rho <- 0.9
+V_rho <- matrix(NA,25,25)
+for(i in 1:25){
+  for(j in 1:25){
+    V_rho[i,j] <- rho^abs(i-j)
+  }
+}
+
+## Initialization
+beta0 <- matrix(NA,M,4)
+beta1 <- matrix(NA,M,4)
+cicp <- matrix(0,2,4)
+cilen <- matrix(0,2,4)
+yobs <- array(NA, c(n,M,4))
+yhat <- array(NA, c(n,M,4))
+one <- matrix( rep(1,n), nrow=n,ncol=1 )
+x1 <- matrix( rnorm(n), nrow=n,ncol=1 )
+X <- cbind( one, x1 )
+Xbeta <- X %*% beta
+zlin <- X %*% B
+zorthog <- (diag(rep(1,n))-X%*%solve(t(X)%*%X)%*%t(X)) %*% matrix((4+rnorm(n)),n,1)
+print( t(X)%*%zorthog )
+zother <- seq(-1,-n,,n)
+
+## Obtain simulation replicates
+library(MASS)
+for(m in 1:M){
+  epsi = mvrnorm(n = 1, mu=rep(0,n), Sigma=V_rho)
+  
+  #CASE 0
+  j <- 1
+  y <- yobs[,m,j] <- Xbeta + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 1
+  j <- 2
+  Zgamma <- zlin*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 2
+  j <- 3
+  Zgamma <- zorthog*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+  
+  #CASE 3
+  j <- 4
+  Zgamma <- zother*gamma
+  y <- yobs[,m,j] <- Xbeta + Zgamma + epsi
+  keeplm <- lm(y~X-1)  #lm.fit(X,y)
+  beta0[m,j] <- keeplm$coef[1]
+  beta1[m,j] <- keeplm$coef[2]
+  yhat[,m,j] <- keeplm$fitted
+  ci <- confint(keeplm)
+  cicp[1,j] <- cicp[1,j] + (ci[1,1]<=beta[1])*(beta[1]<=ci[1,2])
+  cicp[2,j] <- cicp[2,j] + (ci[2,1]<=beta[2])*(beta[2]<=ci[2,2])
+  cilen[1,j] <- cilen[1,j] + ci[1,2]-ci[1,1]
+  cilen[2,j] <- cilen[2,j] + ci[2,2]-ci[2,1]
+}
+cicp <- cicp/M
+cilen <- cilen/M
+
+par(mfrow=c(2,2))
+
+j<-1
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 0: assumed=truth", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+
+par(mfrow=c(2,2))
+
+j<-2
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 1: Z in column space of X", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+
+par(mfrow=c(2,2))
+
+j<-3
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 2: Z orthogonal to column space of X", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+
+par(mfrow=c(2,2))
+
+j<-4
+dotchart( beta0[,j], xlab=expression(hat(beta)[0]), xlim=c(min(beta0,beta[1]),max(beta0,beta[1])) )
+abline( v=beta[1], col="red" )
+dotchart( beta1[,j], xlab=expression(hat(beta)[1]), xlim=c(min(beta1,beta[2]),max(beta1,beta[2])))
+abline( v=beta[2], col="red" )
+plot( yobs[,,j], yhat[,,j], xlab="y",ylab="", xlim=c(min(yobs),max(yobs)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+plot( matrix(Xbeta,n,M), yhat[,,j], xlab=expression(paste("X",beta)),ylab="", xlim=c(min(Xbeta),max(Xbeta)), ylim=c(min(yhat),max(yhat)) )
+mtext(side=2,text=expression(hat(y)),line=2.5,cex=.75)
+abline(a=0,b=1, col="red" )
+mtext("CASE 3: other", side=3, line=0, outer=T)
+mtext(paste("Actual coverages of reported 95% CI:",
+            cicp[1,j],",   ",cicp[2,j]), side=3, line=-1, outer=T)
+mtext(paste("CI lengths are:",round(cilen[1,j],3),",   ",round(cilen[2,j],3)), 
+      side=3, line=-2, outer=T) 
+```
+
+
